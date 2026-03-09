@@ -6,7 +6,16 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-echo "--- Начинаю настройку UFW ---"
+# Запрос пользовательского порта
+read -p "Введите порт панеля: " CUSTOM_PORT
+
+# Проверка корректности введенного порта (только числа от 1 до 65535)
+if ! [[ "$CUSTOM_PORT" =~ ^[0-9]+$ ]] || [ "$CUSTOM_PORT" -lt 1 ] || [ "$CUSTOM_PORT" -gt 65535 ]; then
+    echo "Ошибка: Некорректный порт. Пожалуйста, введите число от 1 до 65535."
+    exit 1
+fi
+
+echo "Настройка Anti-DDoS by Vocky"
 
 # 1. Сброс текущих правил (осторожно, все кастомные правила удалятся)
 ufw --force reset
@@ -24,17 +33,17 @@ NETWORKS=(
     "149.154.166.0/24"
 )
 
-# 3. Цикл по сетям для открытия портов 22 и 443
+# 3. Цикл по сетям для открытия портов 22 и пользовательского порта
 for net in "${NETWORKS[@]}"; do
-    echo "Разрешаю доступ для: $net"
+    echo "Разрешаю доступ для: $net на порты 22 и $CUSTOM_PORT"
     
-    # Входящий трафик (SSH и HTTPS)
+    # Входящий трафик
     ufw allow in from "$net" to any port 22 proto tcp comment "SSH from $net"
-    ufw allow in from "$net" to any port 443 proto tcp comment "HTTPS from $net"
+    ufw allow in from "$net" to any port "$CUSTOM_PORT" proto tcp comment "Port $CUSTOM_PORT from $net"
     
     # Исходящий трафик (ответы и запросы к этим сетям)
     ufw allow out to "$net" port 22 proto tcp comment "SSH to $net"
-    ufw allow out to "$net" port 443 proto tcp comment "HTTPS to $net"
+    ufw allow out to "$net" port "$CUSTOM_PORT" proto tcp comment "Port $CUSTOM_PORT to $net"
 done
 
 # 4. Важное дополнение: Разрешаем Loopback (локальный интерфейс)
@@ -51,7 +60,7 @@ NC='\033[0m' # No Color (Сброс)
 
 echo -e "${RED}"
 cat << 'EOF'
-    ▄   ████▄ ▄█▄    █  █▀ ▀▄    ▄ 
+    ▄  ████▄ ▄█▄    █  █▀ ▀▄    ▄ 
      █  █   █ █▀ ▀▄  █▄█      █  █  
 █     █ █   █ █    ▀  █▀▄      ▀█   
  █    █ ▀████ █▄  ▄▀ █  █      █    
