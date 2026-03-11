@@ -7,7 +7,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Запрос пользовательского порта
-read -p "Введите порт панеля: " CUSTOM_PORT
+read -p "Введите порт панели: " CUSTOM_PORT
 
 # Проверка корректности введенного порта (только числа от 1 до 65535)
 if ! [[ "$CUSTOM_PORT" =~ ^[0-9]+$ ]] || [ "$CUSTOM_PORT" -lt 1 ] || [ "$CUSTOM_PORT" -gt 65535 ]; then
@@ -15,14 +15,16 @@ if ! [[ "$CUSTOM_PORT" =~ ^[0-9]+$ ]] || [ "$CUSTOM_PORT" -lt 1 ] || [ "$CUSTOM_
     exit 1
 fi
 
-echo "Настройка Anti-DDoS by Vocky"
+echo "Настройка Anti-DDoS by Vocky (Исправленная версия)"
 
-# 1. Сброс текущих правил (осторожно, все кастомные правила удалятся)
+# 1. Сброс текущих правил
 ufw --force reset
 
-# 2. Установка политики по умолчанию: запретить всё (входящее и исходящее)
+# 2. Установка политики по умолчанию: 
+# Запрещаем все ВХОДЯЩИЕ (кроме разрешенных ниже)
 ufw default deny incoming
-ufw default deny outgoing
+# РАЗРЕШАЕМ все ИСХОДЯЩИЕ (чтобы сервер и прокси могли выходить в интернет)
+ufw default allow outgoing
 
 # Список разрешенных подсетей
 NETWORKS=(
@@ -35,19 +37,17 @@ NETWORKS=(
 
 # 3. Цикл по сетям для открытия портов 22 и пользовательского порта
 for net in "${NETWORKS[@]}"; do
-    echo "Разрешаю доступ для: $net на порты 22 и $CUSTOM_PORT"
+    echo "Разрешаю ВХОДЯЩИЙ доступ для: $net на порты 22 и $CUSTOM_PORT"
     
-    # Входящий трафик
+    # Входящий трафик (ответы уйдут автоматически благодаря stateful-природе UFW)
     ufw allow in from "$net" to any port 22 proto tcp comment "SSH from $net"
-    ufw allow in from "$net" to any port "$CUSTOM_PORT" proto tcp comment "Port $CUSTOM_PORT from $net"
+    ufw allow in from "$net" to any port "$CUSTOM_PORT" proto tcp comment "Panel Port $CUSTOM_PORT from $net"
     
-    # Исходящий трафик (ответы и запросы к этим сетям)
-    ufw allow out to "$net" port 22 proto tcp comment "SSH to $net"
-    ufw allow out to "$net" port "$CUSTOM_PORT" proto tcp comment "Port $CUSTOM_PORT to $net"
+    # Если панель использует UDP (например, для VPN/WireGuard), раскомментируйте строку ниже:
+    # ufw allow in from "$net" to any port "$CUSTOM_PORT" proto udp comment "Panel Port $CUSTOM_PORT from $net (UDP)"
 done
 
 # 4. Важное дополнение: Разрешаем Loopback (локальный интерфейс)
-# Без этого многие системные службы внутри сервера перестанут работать
 ufw allow in on lo
 ufw allow out on lo
 
@@ -69,4 +69,4 @@ cat << 'EOF'
    ▐                                
 EOF
 echo -e "${NC}"
-echo -e "\n\nНастройка Anti-DDoS завершена!"
+echo -e "\n\nНастройка Anti-DDoS завершена! Доступ открыт только для указанных подсетей."
